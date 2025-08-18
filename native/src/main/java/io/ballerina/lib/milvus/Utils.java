@@ -33,11 +33,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import static io.ballerina.lib.milvus.Client.VECTOR;
 import static io.ballerina.lib.milvus.ModuleUtils.getModule;
 
 public class Utils {
     private static final String ERROR_TYPE = "Error";
+    private static final String VECTORS = "vectors";
     private Utils() {
     }
 
@@ -50,7 +50,7 @@ public class Utils {
         Object[] keys = data.getKeys();
         for (Object keyObj : keys) {
             String key = (keyObj instanceof BString) ? ((BString) keyObj).getValue() : String.valueOf(keyObj);
-            if (VECTOR.equals(key) || primaryKey.equals(key)) {
+            if (VECTORS.equals(key) || primaryKey.equals(key)) {
                 continue;
             }
             Object val = data.get(StringUtils.fromString(key));

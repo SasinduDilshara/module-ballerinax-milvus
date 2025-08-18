@@ -26,6 +26,7 @@ import io.ballerina.runtime.api.types.ArrayType;
 import io.ballerina.runtime.api.types.RecordType;
 import io.ballerina.runtime.api.types.TypeTags;
 import io.ballerina.runtime.api.utils.StringUtils;
+import io.ballerina.runtime.api.utils.ValueUtils;
 import io.ballerina.runtime.api.values.BArray;
 import io.ballerina.runtime.api.values.BError;
 import io.ballerina.runtime.api.values.BMap;
@@ -293,7 +294,8 @@ public class Client {
                     ModuleUtils.getModule(), 0, false, 1);
             ArrayType arrayType = TypeCreator.createArrayType(recordType);
             BArray[] resultArrays = new BArray[searchResults.size()];
-
+            RecordType outputFieldsType = TypeCreator.createRecordType("Properties",
+                    ModuleUtils.getModule(), 0, false, 1);
             for (List<SearchResp.SearchResult> result : searchResults) {
                 BMap<BString, Object>[] responses = new BMap[result.size()];
                 for (SearchResp.SearchResult res : result) {
@@ -301,7 +303,8 @@ public class Client {
                             ValueCreator.createRecordValue(ModuleUtils.getModule(), SEARCH_RESULT);
                     BMap<BString, Object> entity = ValueCreator.createMapValue();
                     for (String key: res.getEntity().keySet()) {
-                        entity.put(StringUtils.fromString(key), res.getEntity().get(key));
+                        entity.put(StringUtils.fromString(key),
+                                ValueUtils.convert(res.getEntity().get(key), outputFieldsType));
                     }
                     response.put(PRIMARY_KEY, StringUtils.fromString(res.getPrimaryKey()));
                     response.put(SEARCH_ID, res.getId());

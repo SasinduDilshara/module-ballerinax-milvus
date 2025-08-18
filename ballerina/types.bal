@@ -128,8 +128,11 @@ public type SearchResult record {|
     string primaryKey;
     int id;
     float similarityScore;
-    record{} outputFields?;
+    Properties outputFields?;
 |};
+
+# Represents the properties of the search result.
+public type Properties record {};
 
 # Represents the request for the create collection operation.
 #
