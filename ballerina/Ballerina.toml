@@ -56,8 +56,8 @@ path = "./lib/grpc-stub-1.60.1.jar"
 [[platform.java21.dependency]]
 groupId = "com.google.protobuf"
 artifactId = "protobuf-java"
-version = "4.31.1"
-path = "./lib/protobuf-java-4.31.1.jar"
+version = "3.25.5"
+path = "./lib/protobuf-java-3.25.5.jar"
 
 [[platform.java21.dependency]]
 groupId = "io.grpc"
