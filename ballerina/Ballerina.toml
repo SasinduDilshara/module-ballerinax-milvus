@@ -15,7 +15,7 @@ graalvmCompatible = false
 groupId = "io.ballerina.lib"
 artifactId = "milvus-native"
 version = "1.0.0"
-path = "../native/build/libs/milvus-native-1.0.0-SNAPSHOT.jar"
+path = "../native/build/libs/milvus-native-1.0.0.jar"
 
 [[platform.java21.dependency]]
 groupId = "io.milvus"
