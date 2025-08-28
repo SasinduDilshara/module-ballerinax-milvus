@@ -26,7 +26,6 @@ import io.ballerina.runtime.api.types.ArrayType;
 import io.ballerina.runtime.api.types.RecordType;
 import io.ballerina.runtime.api.types.TypeTags;
 import io.ballerina.runtime.api.utils.StringUtils;
-import io.ballerina.runtime.api.utils.ValueUtils;
 import io.ballerina.runtime.api.values.BArray;
 import io.ballerina.runtime.api.values.BError;
 import io.ballerina.runtime.api.values.BMap;
@@ -90,6 +89,9 @@ public class Client {
     public static final BString ENTITY = StringUtils.fromString("entity");
     public static final BString PRIMARY_KEY_VALUE = StringUtils.fromString("value");
     public static final BString PRIMARY_KEY_FIELD_NAME = StringUtils.fromString("fieldName");
+    public static final BString PROPERTIES = StringUtils.fromString("properties");
+    public static final BString OUTPUT_FIELDS = StringUtils.fromString("outputFields");
+    public static final String PROPERTIES_RECORD = "Properties";
 
     public static BError initiateClient(BObject clientObj, BString serviceUrl, BMap<String, Object> config) {
         try {
@@ -269,7 +271,6 @@ public class Client {
             BArray vectors = request.getArrayValue(VECTORS);
             BString filter = request.getStringValue(FILTER);
             Long topK = request.getIntValue(TOP_K);
-
             if (vectors == null || vectors.size() == 0) {
                 return createError("Vectors cannot be null or empty", null);
             }
@@ -287,6 +288,7 @@ public class Client {
                             .collect(Collectors.toList())));
                 }
             }
+
             SearchReq.SearchReqBuilder<?, ?> searchReq = SearchReq.builder();
             searchReq = (collectionName != null) ? searchReq.collectionName(collectionName.getValue()) : searchReq;
             searchReq = (partitionName != null)
@@ -295,6 +297,11 @@ public class Client {
             searchReq = (filter != null) ? searchReq.filter(filter.getValue()) : searchReq;
             searchReq = (topK != null) ? searchReq.topK(topK.intValue()) : searchReq;
 
+            if (request.containsKey(OUTPUT_FIELDS)) {
+                BArray outputFields = request.getArrayValue(OUTPUT_FIELDS);
+                List<String> fields = Arrays.asList(outputFields.getStringArray());
+                searchReq.outputFields(fields);
+            }
             SearchResp searchR = client.search(searchReq.build());
             List<List<SearchResp.SearchResult>> searchResults = searchR.getSearchResults();
 
@@ -302,27 +309,43 @@ public class Client {
                     ModuleUtils.getModule(), 0, false, 1);
             ArrayType arrayType = TypeCreator.createArrayType(recordType);
             BArray[] resultArrays = new BArray[searchResults.size()];
-            RecordType outputFieldsType = TypeCreator.createRecordType("Properties",
+            RecordType outputFieldsType = TypeCreator.createRecordType(PROPERTIES_RECORD,
                     ModuleUtils.getModule(), 0, false, 1);
-            for (List<SearchResp.SearchResult> result : searchResults) {
-                BMap<BString, Object>[] responses = new BMap[result.size()];
-                for (SearchResp.SearchResult res : result) {
+            for (List<SearchResp.SearchResult> results : searchResults) {
+                BMap<BString, Object>[] responses = new BMap[results.size()];
+                for (SearchResp.SearchResult result : results) {
                     BMap<BString, Object> response =
                             ValueCreator.createRecordValue(ModuleUtils.getModule(), SEARCH_RESULT);
-                    BMap<BString, Object> entity = ValueCreator.createMapValue();
-                    for (String key: res.getEntity().keySet()) {
-                        entity.put(StringUtils.fromString(key),
-                                ValueUtils.convert(res.getEntity().get(key), outputFieldsType));
+                    BMap<BString, Object> entity = ValueCreator.createRecordValue(outputFieldsType);
+                    for (String key: result.getEntity().keySet()) {
+                        if (result.getEntity().get(key) instanceof List<?> list) {
+                            if (!list.isEmpty() && list.get(0) instanceof Number) {
+                                double[] values = list.stream()
+                                        .mapToDouble(value -> ((Number) value).floatValue())
+                                        .toArray();
+                                BArray floatArray = ValueCreator.createArrayValue(values);
+                                entity.put(StringUtils.fromString(key), floatArray);
+                            } else {
+                                BString[] values = list.stream()
+                                        .map(value -> StringUtils.fromString(value.toString()))
+                                        .toArray(BString[]::new);
+                                BArray stringArray = ValueCreator.createArrayValue(values);
+                                entity.put(StringUtils.fromString(key), stringArray);
+                            }
+                        } else {
+                            entity.put(StringUtils.fromString(key),
+                                    StringUtils.fromString(result.getEntity().get(key).toString()));
+                        }
                     }
-                    response.put(PRIMARY_KEY, StringUtils.fromString(res.getPrimaryKey()));
-                    response.put(SEARCH_ID, res.getId());
-                    response.put(SIMILARITY_SCORE, res.getScore().doubleValue());
-                    response.put(ENTITY, entity);
-                    responses[result.indexOf(res)] = response;
+                    response.put(PRIMARY_KEY, StringUtils.fromString(result.getPrimaryKey()));
+                    response.put(SEARCH_ID, result.getId());
+                    response.put(SIMILARITY_SCORE, result.getScore().doubleValue());
+                    response.put(OUTPUT_FIELDS, entity);
+                    responses[results.indexOf(result)] = response;
                 }
                 BArray responseArray = ValueCreator.createArrayValue(responses,
                         TypeCreator.createArrayType(recordType));
-                resultArrays[searchResults.indexOf(result)] = responseArray;
+                resultArrays[searchResults.indexOf(results)] = responseArray;
             }
             return ValueCreator.createArrayValue(resultArrays, TypeCreator.createArrayType(arrayType));
         } catch (Exception error) {

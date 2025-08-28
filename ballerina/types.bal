@@ -126,7 +126,7 @@ public type SearchRequest record {
     float[][]|float[] vectors;
     int topK;
     string filter?;
-    string outputFields?;
+    string[] outputFields?;
 };
 
 # Represents the result of the search operation.
@@ -143,7 +143,11 @@ public type SearchResult record {|
 |};
 
 # Represents the properties of the search result.
-public type Properties record {};
+#
+# + vector - The vector embeddings of the search result
+public type Properties record {
+    float[] vector?;
+};
 
 # Represents the request for the create collection operation.
 #
