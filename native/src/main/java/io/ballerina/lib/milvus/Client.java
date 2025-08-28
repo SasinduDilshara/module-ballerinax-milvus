@@ -24,7 +24,6 @@ import io.ballerina.runtime.api.creators.TypeCreator;
 import io.ballerina.runtime.api.creators.ValueCreator;
 import io.ballerina.runtime.api.types.ArrayType;
 import io.ballerina.runtime.api.types.RecordType;
-import io.ballerina.runtime.api.types.TypeTags;
 import io.ballerina.runtime.api.utils.StringUtils;
 import io.ballerina.runtime.api.values.BArray;
 import io.ballerina.runtime.api.values.BError;
@@ -38,11 +37,11 @@ import io.milvus.v2.service.collection.request.CreateCollectionReq;
 import io.milvus.v2.service.collection.request.LoadCollectionReq;
 import io.milvus.v2.service.index.request.CreateIndexReq;
 import io.milvus.v2.service.vector.request.DeleteReq;
+import io.milvus.v2.service.vector.request.QueryReq;
 import io.milvus.v2.service.vector.request.SearchReq;
 import io.milvus.v2.service.vector.request.UpsertReq;
-import io.milvus.v2.service.vector.request.data.BaseVector;
-import io.milvus.v2.service.vector.request.data.FloatVec;
 import io.milvus.v2.service.vector.response.DeleteResp;
+import io.milvus.v2.service.vector.response.QueryResp;
 import io.milvus.v2.service.vector.response.SearchResp;
 
 import java.util.ArrayList;
@@ -67,8 +66,6 @@ public class Client {
     public static final BString PRIMARY_KEY = StringUtils.fromString("primaryKey");
     public static final BString DATA = StringUtils.fromString("data");
     public static final BString VECTORS = StringUtils.fromString("vectors");
-    public static final String ID_FIELD = "id";
-    public static final BString ID = StringUtils.fromString(ID_FIELD);
     public static final BString IDS = StringUtils.fromString("ids");
     public static final String VECTOR = "vector";
     public static final BString PARTITION_NAME = StringUtils.fromString("partitionName");
@@ -86,12 +83,12 @@ public class Client {
     public static final BString KEEP_ALIVE_WITHOUT_CALLS = StringUtils.fromString("keepAliveWithoutCalls");
     public static final BString SEARCH_ID = StringUtils.fromString("id");
     public static final BString SIMILARITY_SCORE = StringUtils.fromString("similarityScore");
-    public static final BString ENTITY = StringUtils.fromString("entity");
     public static final BString PRIMARY_KEY_VALUE = StringUtils.fromString("value");
     public static final BString PRIMARY_KEY_FIELD_NAME = StringUtils.fromString("fieldName");
     public static final BString PROPERTIES = StringUtils.fromString("properties");
     public static final BString OUTPUT_FIELDS = StringUtils.fromString("outputFields");
     public static final String PROPERTIES_RECORD = "Properties";
+    public static final String QUERY_RESULT = "QueryResult";
 
     public static BError initiateClient(BObject clientObj, BString serviceUrl, BMap<String, Object> config) {
         try {
@@ -271,29 +268,12 @@ public class Client {
             BArray vectors = request.getArrayValue(VECTORS);
             BString filter = request.getStringValue(FILTER);
             Long topK = request.getIntValue(TOP_K);
-            if (vectors == null || vectors.size() == 0) {
-                return createError("Vectors cannot be null or empty", null);
-            }
-            List<BaseVector> vectorArray = new ArrayList<>();
-
-            if (vectors.getElementType().getTag() == TypeTags.FLOAT_TAG) {
-                vectorArray.add(new FloatVec(Arrays.stream(vectors.getFloatArray())
-                        .mapToObj(d -> (float) d)
-                        .collect(Collectors.toList())));
-            } else {
-                for (int i = 0; i < vectors.size(); i++) {
-                    BArray currentVector = (BArray) vectors.get(i); // Use get(i) instead of array access
-                    vectorArray.add(new FloatVec(Arrays.stream(currentVector.getFloatArray())
-                            .mapToObj(d -> (float) d)
-                            .collect(Collectors.toList())));
-                }
-            }
 
             SearchReq.SearchReqBuilder<?, ?> searchReq = SearchReq.builder();
+            searchReq = searchReq.data(Utils.getVectors(vectors));
             searchReq = (collectionName != null) ? searchReq.collectionName(collectionName.getValue()) : searchReq;
             searchReq = (partitionName != null)
                     ? searchReq.partitionNames(Arrays.asList(partitionName.getStringArray())) : searchReq;
-            searchReq = searchReq.data(vectorArray);
             searchReq = (filter != null) ? searchReq.filter(filter.getValue()) : searchReq;
             searchReq = (topK != null) ? searchReq.topK(topK.intValue()) : searchReq;
 
@@ -313,36 +293,7 @@ public class Client {
                     ModuleUtils.getModule(), 0, false, 1);
             for (List<SearchResp.SearchResult> results : searchResults) {
                 BMap<BString, Object>[] responses = new BMap[results.size()];
-                for (SearchResp.SearchResult result : results) {
-                    BMap<BString, Object> response =
-                            ValueCreator.createRecordValue(ModuleUtils.getModule(), SEARCH_RESULT);
-                    BMap<BString, Object> entity = ValueCreator.createRecordValue(outputFieldsType);
-                    for (String key: result.getEntity().keySet()) {
-                        if (result.getEntity().get(key) instanceof List<?> list) {
-                            if (!list.isEmpty() && list.get(0) instanceof Number) {
-                                double[] values = list.stream()
-                                        .mapToDouble(value -> ((Number) value).floatValue())
-                                        .toArray();
-                                BArray floatArray = ValueCreator.createArrayValue(values);
-                                entity.put(StringUtils.fromString(key), floatArray);
-                            } else {
-                                BString[] values = list.stream()
-                                        .map(value -> StringUtils.fromString(value.toString()))
-                                        .toArray(BString[]::new);
-                                BArray stringArray = ValueCreator.createArrayValue(values);
-                                entity.put(StringUtils.fromString(key), stringArray);
-                            }
-                        } else {
-                            entity.put(StringUtils.fromString(key),
-                                    StringUtils.fromString(result.getEntity().get(key).toString()));
-                        }
-                    }
-                    response.put(PRIMARY_KEY, StringUtils.fromString(result.getPrimaryKey()));
-                    response.put(SEARCH_ID, result.getId());
-                    response.put(SIMILARITY_SCORE, result.getScore().doubleValue());
-                    response.put(OUTPUT_FIELDS, entity);
-                    responses[results.indexOf(result)] = response;
-                }
+                Utils.generateSearchResult(outputFieldsType, results, responses);
                 BArray responseArray = ValueCreator.createArrayValue(responses,
                         TypeCreator.createArrayType(recordType));
                 resultArrays[searchResults.indexOf(results)] = responseArray;

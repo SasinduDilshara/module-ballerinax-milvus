@@ -21,23 +21,38 @@ package io.ballerina.lib.milvus;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import io.ballerina.runtime.api.creators.ErrorCreator;
+import io.ballerina.runtime.api.creators.ValueCreator;
+import io.ballerina.runtime.api.types.RecordType;
+import io.ballerina.runtime.api.types.TypeTags;
 import io.ballerina.runtime.api.utils.StringUtils;
 import io.ballerina.runtime.api.values.BArray;
 import io.ballerina.runtime.api.values.BError;
 import io.ballerina.runtime.api.values.BMap;
 import io.ballerina.runtime.api.values.BString;
+import io.milvus.v2.service.vector.request.data.BaseVector;
+import io.milvus.v2.service.vector.request.data.FloatVec;
+import io.milvus.v2.service.vector.response.QueryResp;
+import io.milvus.v2.service.vector.response.SearchResp;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
+import static io.ballerina.lib.milvus.Client.OUTPUT_FIELDS;
+import static io.ballerina.lib.milvus.Client.PRIMARY_KEY;
+import static io.ballerina.lib.milvus.Client.QUERY_RESULT;
+import static io.ballerina.lib.milvus.Client.SEARCH_ID;
+import static io.ballerina.lib.milvus.Client.SEARCH_RESULT;
+import static io.ballerina.lib.milvus.Client.SIMILARITY_SCORE;
 import static io.ballerina.lib.milvus.ModuleUtils.getModule;
 
 public class Utils {
     private static final String ERROR_TYPE = "Error";
-    private static final String VECTORS = "vectors";
+
     private Utils() {
     }
 
@@ -76,6 +91,22 @@ public class Utils {
         }
         return value;
     }
+
+    protected static void generateSearchResult(RecordType outputFieldsType, List<SearchResp.SearchResult> results,
+                                             BMap<BString, Object>[] responses) {
+        for (SearchResp.SearchResult result : results) {
+            BMap<BString, Object> response =
+                    ValueCreator.createRecordValue(ModuleUtils.getModule(), SEARCH_RESULT);
+            BMap<BString, Object> entity = ValueCreator.createRecordValue(outputFieldsType);
+            getResult(result, entity);
+            response.put(PRIMARY_KEY, StringUtils.fromString(result.getPrimaryKey()));
+            response.put(SEARCH_ID, result.getId());
+            response.put(SIMILARITY_SCORE, result.getScore().doubleValue());
+            response.put(OUTPUT_FIELDS, entity);
+            responses[results.indexOf(result)] = response;
+        }
+    }
+
     protected static void generateQueryResult(List<QueryResp.QueryResult> results,
                                               BMap<BString, Object>[] responses) {
         for (QueryResp.QueryResult result : results) {
@@ -86,6 +117,28 @@ public class Utils {
         }
     }
 
+    private static void getResult(SearchResp.SearchResult result, BMap<BString, Object> entity) {
+        for (String key: result.getEntity().keySet()) {
+            if (result.getEntity().get(key) instanceof List<?> list) {
+                if (!list.isEmpty() && list.get(0) instanceof Number) {
+                    double[] values = list.stream()
+                            .mapToDouble(value -> ((Number) value).floatValue())
+                            .toArray();
+                    BArray floatArray = ValueCreator.createArrayValue(values);
+                    entity.put(StringUtils.fromString(key), floatArray);
+                } else {
+                    BString[] values = list.stream()
+                            .map(value -> StringUtils.fromString(value.toString()))
+                            .toArray(BString[]::new);
+                    BArray stringArray = ValueCreator.createArrayValue(values);
+                    entity.put(StringUtils.fromString(key), stringArray);
+                }
+            } else {
+                entity.put(StringUtils.fromString(key),
+                        StringUtils.fromString(result.getEntity().get(key).toString()));
+            }
+        }
+    }
 
     private static void getResult(QueryResp.QueryResult result, BMap<BString, Object> entity) {
         for (String key: result.getEntity().keySet()) {
@@ -108,5 +161,21 @@ public class Utils {
                         StringUtils.fromString(result.getEntity().get(key).toString()));
             }
         }
+    }
+    protected static List<BaseVector> getVectors(BArray vectors) {
+        List<BaseVector> vectorArray = new ArrayList<>();
+        if (vectors.getElementType().getTag() == TypeTags.FLOAT_TAG) {
+            vectorArray.add(new FloatVec(Arrays.stream(vectors.getFloatArray())
+                    .mapToObj(value -> (float) value)
+                    .collect(Collectors.toList())));
+        } else {
+            for (int index = 0; index < vectors.size(); index++) {
+                BArray currentVector = (BArray) vectors.get(index);
+                vectorArray.add(new FloatVec(Arrays.stream(currentVector.getFloatArray())
+                        .mapToObj(value -> (float) value)
+                        .collect(Collectors.toList())));
+            }
+        }
+        return vectorArray;
     }
 }
