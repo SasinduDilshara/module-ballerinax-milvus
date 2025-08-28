@@ -18,15 +18,16 @@ import ballerina/test;
 
 Client milvusClient = check new(serviceUrl = "http://localhost:19530");
 
-string collectionName = "test_collections";
+string collectionName = "test_collection";
 int id  = 10001;
-string primaryKey = "id";
+string primaryKey = "primary_key";
 
 @test:Config {}
 function testCreateCollection() returns error? {
     check milvusClient->createCollection({
         collectionName,
-        dimension: 3
+        dimension: 3,
+        primaryFieldName: "primary_key"
     });
 }
 
@@ -45,14 +46,15 @@ function testUpsertEntry() returns error? {
     check milvusClient->upsert({
         collectionName,
         data: {
-            id,
+            primaryKey: {
+                value: id,
+                fieldName: "primary_key"
+            },
             vectors: [0.3, 0.4, 0.5],
-            "chunk": {
+            properties: {
                 "content": "test",
                 "type": "text",
-                "metadata": {
-                    "createdTime": "1723600000"
-                }
+                "createdTime": "1723600000"
             }
         }
     });
@@ -79,7 +81,10 @@ function testDeleteEntryWithIds() returns error? {
         check milvusClient->upsert({
             collectionName,
             data: {
-                id,
+                primaryKey: {
+                    value: id,
+                    fieldName: "primary_key"
+                },
                 vectors: [0.3, 0.4, 0.5]
             }
         });
@@ -99,14 +104,16 @@ function testSearchNearVectors() returns error? {
     SearchResult[][] result = check milvusClient->search({
         collectionName,
         vectors: [0.3, 0.4, 0.5],
-        topK: 10
+        topK: 10,
+        outputFields: ["content", "type", "vector"]
     });
     if result.length() > 0 && result[0].length() > 0 {
         result = check milvusClient->search({
             collectionName,
             vectors: [[0.3, 0.4, 0.5]],
             topK: 1,
-            filter: string `${primaryKey} == ${id}`
+            filter: string `${primaryKey} == ${id} and content == "test"`,
+            outputFields: ["content", "type", "vector"]
         });
         test:assertEquals(result[0][0].id, id);
     }
