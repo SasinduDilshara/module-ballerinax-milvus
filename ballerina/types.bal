@@ -129,6 +129,19 @@ public type SearchRequest record {
     string[] outputFields?;
 };
 
+# Represents the request for the query operation.
+#
+# + collectionName - The name of the collection to search data from
+# + partitionName - The name of the partition to search data from
+# + filter - The filter to search for
+# + outputFields - The fields to return
+public type QueryRequest record {
+    string collectionName;
+    string partitionName?;
+    string filter?;
+    string[] outputFields?;
+};
+
 # Represents the result of the search operation.
 #
 # + primaryKey - The name of the primary key of the result
@@ -141,6 +154,10 @@ public type SearchResult record {|
     float similarityScore;
     Properties outputFields?;
 |};
+
+# Represents the result of the query operation.
+# 
+public type QueryResult record {};
 
 # Represents the properties of the search result.
 #

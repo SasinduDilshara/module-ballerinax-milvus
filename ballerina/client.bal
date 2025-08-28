@@ -88,4 +88,12 @@ public isolated client class Client {
     remote isolated function search(SearchRequest request) returns SearchResult[][]|Error = @java:Method {
         'class: "io.ballerina.lib.milvus.Client"
     } external;
+
+    # Conducts a scalar filtering for data in a collection in the Milvus vector database.
+    #
+    # + request - The request to search for data
+    # + return - If the search is successful, the result will be an array of arrays of `SearchResult` records. Unless, returns an error
+    remote isolated function query(QueryRequest request) returns QueryResult[][]|Error = @java:Method {
+        'class: "io.ballerina.lib.milvus.Client"
+    } external;
 }

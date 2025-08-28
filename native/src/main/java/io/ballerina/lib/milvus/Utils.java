@@ -76,4 +76,37 @@ public class Utils {
         }
         return value;
     }
+    protected static void generateQueryResult(List<QueryResp.QueryResult> results,
+                                              BMap<BString, Object>[] responses) {
+        for (QueryResp.QueryResult result : results) {
+            BMap<BString, Object> response =
+                    ValueCreator.createRecordValue(ModuleUtils.getModule(), QUERY_RESULT);
+            getResult(result, response);
+            responses[results.indexOf(result)] = response;
+        }
+    }
+
+
+    private static void getResult(QueryResp.QueryResult result, BMap<BString, Object> entity) {
+        for (String key: result.getEntity().keySet()) {
+            if (result.getEntity().get(key) instanceof List<?> list) {
+                if (!list.isEmpty() && list.get(0) instanceof Number) {
+                    double[] values = list.stream()
+                            .mapToDouble(value -> ((Number) value).floatValue())
+                            .toArray();
+                    BArray floatArray = ValueCreator.createArrayValue(values);
+                    entity.put(StringUtils.fromString(key), floatArray);
+                } else {
+                    BString[] values = list.stream()
+                            .map(value -> StringUtils.fromString(value.toString()))
+                            .toArray(BString[]::new);
+                    BArray stringArray = ValueCreator.createArrayValue(values);
+                    entity.put(StringUtils.fromString(key), stringArray);
+                }
+            } else {
+                entity.put(StringUtils.fromString(key),
+                        StringUtils.fromString(result.getEntity().get(key).toString()));
+            }
+        }
+    }
 }

@@ -352,4 +352,42 @@ public class Client {
             return createError("Failed to search data", error);
         }
     }
+
+    public static Object query(BObject clientObject, BMap<String, Object> request) {
+        try {
+            MilvusClientV2 client = (MilvusClientV2) clientObject.getNativeData(NATIVE_CLIENT);
+            BString collectionName = request.getStringValue(COLLECTION_NAME);
+            BArray partitionName = request.getArrayValue(PARTITION_NAMES);
+            BString filter = request.getStringValue(FILTER);
+            BArray ids = request.getArrayValue(IDS);
+            QueryReq.QueryReqBuilder<?, ?> queryReq = QueryReq.builder();
+            queryReq = (collectionName != null) ? queryReq.collectionName(collectionName.getValue()) : queryReq;
+            queryReq = (partitionName != null)
+                    ? queryReq.partitionNames(Arrays.asList(partitionName.getStringArray())) : queryReq;
+            queryReq = (filter != null) ? queryReq.filter(filter.getValue()) : queryReq;
+            queryReq = (ids != null)
+                    ? queryReq.ids(Arrays.stream(ids.getIntArray()).boxed().collect(Collectors.toList())) : queryReq;
+            if (request.containsKey(OUTPUT_FIELDS)) {
+                BArray outputFields = request.getArrayValue(OUTPUT_FIELDS);
+                List<String> fields = Arrays.asList(outputFields.getStringArray());
+                queryReq.outputFields(fields);
+            }
+            QueryResp queryResponse = client.query(queryReq.build());
+            List<QueryResp.QueryResult> queryResults = queryResponse.getQueryResults();
+            RecordType recordType = TypeCreator.createRecordType(QUERY_RESULT,
+                    ModuleUtils.getModule(), 0, false, 1);
+            ArrayType arrayType = TypeCreator.createArrayType(recordType);
+            BArray[] resultArrays = new BArray[queryResults.size()];
+            for (QueryResp.QueryResult results : queryResults) {
+                BMap<BString, Object>[] responses = new BMap[queryResults.size()];
+                Utils.generateQueryResult(queryResults, responses);
+                BArray responseArray = ValueCreator.createArrayValue(responses,
+                        TypeCreator.createArrayType(recordType));
+                resultArrays[queryResults.indexOf(results)] = responseArray;
+            }
+            return ValueCreator.createArrayValue(resultArrays, TypeCreator.createArrayType(arrayType));
+        } catch (Exception error) {
+            return createError("Failed to query data", error);
+        }
+    }
 }
