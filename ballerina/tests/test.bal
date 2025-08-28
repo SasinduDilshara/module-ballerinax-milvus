@@ -31,17 +31,13 @@ function testCreateCollection() returns error? {
     });
 }
 
-@test:Config {
-    groups: ["list"]
-}
+@test:Config {}
 function testListCollections() returns error? {
     string[] collection = check milvusClient->listCollections();
     test:assertNotEquals(collection.indexOf(collectionName), ());
 }
 
-@test:Config {
-    groups: ["upsert"]
-}
+@test:Config {}
 function testUpsertEntry() returns error? {
     check milvusClient->upsert({
         collectionName,
@@ -72,7 +68,7 @@ function testDeleteEntry() returns error? {
 }
 
 @test:Config {
-    groups: ["delete2"],
+    groups: ["delete"],
     dependsOn: [testSearchNearVectors]
 }
 function testDeleteEntryWithIds() returns error? {
@@ -96,7 +92,7 @@ function testDeleteEntryWithIds() returns error? {
 }
 
 @test:Config {
-    groups: ["query"],
+    groups: ["search"],
     dependsOn: [testUpsertEntry, testCreateCollection]
 }
 function testSearchNearVectors() returns error? {
