@@ -88,6 +88,8 @@ public class Client {
     public static final BString SEARCH_ID = StringUtils.fromString("id");
     public static final BString SIMILARITY_SCORE = StringUtils.fromString("similarityScore");
     public static final BString ENTITY = StringUtils.fromString("entity");
+    public static final BString PRIMARY_KEY_VALUE = StringUtils.fromString("value");
+    public static final BString PRIMARY_KEY_FIELD_NAME = StringUtils.fromString("fieldName");
 
     public static BError initiateClient(BObject clientObj, BString serviceUrl, BMap<String, Object> config) {
         try {
@@ -146,6 +148,7 @@ public class Client {
                     .collectionName(collectionName)
                     .dimension(dimension.intValue())
                     .enableDynamicField(true)
+                    .primaryFieldName(request.getStringValue(StringUtils.fromString("primaryFieldName")).getValue())
                     .build();
             client.createCollection(createCollectionRequest);
             return null;
@@ -210,7 +213,9 @@ public class Client {
             String collectionName = request.getStringValue(COLLECTION_NAME).getValue();
             BMap<?, ?> data = request.getMapValue(DATA);
             double[] vectors = ((BArray) data.get(VECTORS)).getFloatArray();
-            long id = data.getIntValue(ID);
+            BMap<?, ?> primaryKey = data.getMapValue(PRIMARY_KEY);
+            long id = primaryKey.getIntValue(PRIMARY_KEY_VALUE);
+            String primaryKeyFieldName = primaryKey.getStringValue(PRIMARY_KEY_FIELD_NAME).getValue();
             Gson gson = new Gson();
             JsonObject row = new JsonObject();
             List<Double> vectorList = new ArrayList<>();
@@ -218,8 +223,11 @@ public class Client {
                 vectorList.add(vector);
             }
             row.add(VECTOR, gson.toJsonTree(vectorList));
-            row.add(ID_FIELD, gson.toJsonTree(id));
-            applyDynamicFields(data, gson, row, ID_FIELD);
+            row.add(primaryKeyFieldName, gson.toJsonTree(id));
+            if (data.containsKey(PROPERTIES)) {
+                BMap<?, ?> properties = data.getMapValue(PROPERTIES);
+                applyDynamicFields(properties, gson, row);
+            }
             List<JsonObject> dataList = new ArrayList<>();
             dataList.add(row);
             UpsertReq upsertRequest = UpsertReq.builder()

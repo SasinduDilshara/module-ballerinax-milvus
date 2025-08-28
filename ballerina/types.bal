@@ -82,10 +82,21 @@ public type UpsertRequest record {
     string collectionName;
     string partitionName?;
     string databaseName?;
+    Entry data;
+};
+
+# Represents a single entry to be upserted into a Milvus collection.
+#
+# + primaryKey -  Primary key value for the entry. Omit when the collection is configured to auto-generate primary keys
+# + vectors - Dense vector embedding for this entry. The length must match the collection's configured dimension.
+# + properties - Additional scalar field values for this record, excluding the vector and primary key fields.
+public type Entry record {
     record {
-        int id;
-        float[] vectors;
-    } data;
+        string fieldName = "id";
+        int value;
+    } primaryKey?;
+    float[] vectors;
+    record{} properties?;
 };
 
 # Represents the request for the delete operation.
@@ -137,9 +148,11 @@ public type Properties record {};
 # Represents the request for the create collection operation.
 #
 # + collectionName - The name of the collection to create
+# + primaryFieldName - The name of the primary field of the collection
 # + dimension - The dimension of the collection
 public type CreateCollectionRequest record {
     string collectionName;
+    string primaryFieldName = "id";
     int dimension;
 };
 

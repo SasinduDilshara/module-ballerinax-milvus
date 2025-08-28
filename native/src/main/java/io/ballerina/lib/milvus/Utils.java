@@ -46,13 +46,10 @@ public class Utils {
         return ErrorCreator.createError(getModule(), ERROR_TYPE, StringUtils.fromString(message), cause, null);
     }
 
-    static void applyDynamicFields(BMap<?, ?> data, Gson gson, JsonObject row, String primaryKey) {
+    static void applyDynamicFields(BMap<?, ?> data, Gson gson, JsonObject row) {
         Object[] keys = data.getKeys();
         for (Object keyObj : keys) {
             String key = (keyObj instanceof BString) ? ((BString) keyObj).getValue() : String.valueOf(keyObj);
-            if (VECTORS.equals(key) || primaryKey.equals(key)) {
-                continue;
-            }
             Object val = data.get(StringUtils.fromString(key));
             row.add(key, gson.toJsonTree(convertToJsonFields(val)));
         }
