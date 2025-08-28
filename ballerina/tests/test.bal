@@ -118,3 +118,19 @@ function testSearchNearVectors() returns error? {
         test:assertEquals(result[0][0].id, id);
     }
 }
+
+@test:Config {
+    groups: ["query"],
+    dependsOn: [testUpsertEntry, testCreateCollection]
+}
+function testQueryVectors() returns error? {
+    check milvusClient->loadCollection(collectionName);
+    QueryResult[][] result = check milvusClient->query({
+        collectionName,
+        filter: string `content == "test"`,
+        outputFields: ["content", "type", "vector"]
+    });
+    if result.length() > 0 && result[0].length() > 0 {
+        test:assertEquals(result[0][0]["content"], "test");
+    }
+}
