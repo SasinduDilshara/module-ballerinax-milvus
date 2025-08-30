@@ -20,10 +20,7 @@ package io.ballerina.lib.milvus;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import io.ballerina.runtime.api.creators.TypeCreator;
 import io.ballerina.runtime.api.creators.ValueCreator;
-import io.ballerina.runtime.api.types.ArrayType;
-import io.ballerina.runtime.api.types.RecordType;
 import io.ballerina.runtime.api.utils.StringUtils;
 import io.ballerina.runtime.api.values.BArray;
 import io.ballerina.runtime.api.values.BError;
@@ -87,7 +84,7 @@ public class Client {
     public static final BString PRIMARY_KEY_FIELD_NAME = StringUtils.fromString("fieldName");
     public static final BString PROPERTIES = StringUtils.fromString("properties");
     public static final BString OUTPUT_FIELDS = StringUtils.fromString("outputFields");
-    public static final String PROPERTIES_RECORD = "Properties";
+    public static final String OUTPUT_FIELDS_TYPE = "OutputFields";
     public static final String QUERY_RESULT = "QueryResult";
 
     public static BError initiateClient(BObject clientObj, BString serviceUrl, BMap<String, Object> config) {
@@ -263,42 +260,10 @@ public class Client {
     public static Object search(BObject clientObject, BMap<String, Object> request) {
         try {
             MilvusClientV2 client = (MilvusClientV2) clientObject.getNativeData(NATIVE_CLIENT);
-            BString collectionName = request.getStringValue(COLLECTION_NAME);
-            BArray partitionName = request.getArrayValue(PARTITION_NAMES);
-            BArray vectors = request.getArrayValue(VECTORS);
-            BString filter = request.getStringValue(FILTER);
-            Long topK = request.getIntValue(TOP_K);
-
-            SearchReq.SearchReqBuilder<?, ?> searchReq = SearchReq.builder();
-            searchReq = searchReq.data(Utils.getVectors(vectors));
-            searchReq = (collectionName != null) ? searchReq.collectionName(collectionName.getValue()) : searchReq;
-            searchReq = (partitionName != null)
-                    ? searchReq.partitionNames(Arrays.asList(partitionName.getStringArray())) : searchReq;
-            searchReq = (filter != null) ? searchReq.filter(filter.getValue()) : searchReq;
-            searchReq = (topK != null) ? searchReq.topK(topK.intValue()) : searchReq;
-
-            if (request.containsKey(OUTPUT_FIELDS)) {
-                BArray outputFields = request.getArrayValue(OUTPUT_FIELDS);
-                List<String> fields = Arrays.asList(outputFields.getStringArray());
-                searchReq.outputFields(fields);
-            }
-            SearchResp searchR = client.search(searchReq.build());
-            List<List<SearchResp.SearchResult>> searchResults = searchR.getSearchResults();
-
-            RecordType recordType = TypeCreator.createRecordType(SEARCH_RESULT,
-                    ModuleUtils.getModule(), 0, false, 1);
-            ArrayType arrayType = TypeCreator.createArrayType(recordType);
-            BArray[] resultArrays = new BArray[searchResults.size()];
-            RecordType outputFieldsType = TypeCreator.createRecordType(PROPERTIES_RECORD,
-                    ModuleUtils.getModule(), 0, false, 1);
-            for (List<SearchResp.SearchResult> results : searchResults) {
-                BMap<BString, Object>[] responses = new BMap[results.size()];
-                Utils.generateSearchResult(outputFieldsType, results, responses);
-                BArray responseArray = ValueCreator.createArrayValue(responses,
-                        TypeCreator.createArrayType(recordType));
-                resultArrays[searchResults.indexOf(results)] = responseArray;
-            }
-            return ValueCreator.createArrayValue(resultArrays, TypeCreator.createArrayType(arrayType));
+            SearchRequest params = Utils.parseSearchRequest(request);
+            SearchReq searchReq = Utils.buildSearchRequest(params);
+            SearchResp searchResp = client.search(searchReq);
+            return Utils.transformSearchResults(searchResp);
         } catch (Exception error) {
             return createError("Failed to search data", error);
         }
@@ -307,36 +272,10 @@ public class Client {
     public static Object query(BObject clientObject, BMap<String, Object> request) {
         try {
             MilvusClientV2 client = (MilvusClientV2) clientObject.getNativeData(NATIVE_CLIENT);
-            BString collectionName = request.getStringValue(COLLECTION_NAME);
-            BArray partitionName = request.getArrayValue(PARTITION_NAMES);
-            BString filter = request.getStringValue(FILTER);
-            BArray ids = request.getArrayValue(IDS);
-            QueryReq.QueryReqBuilder<?, ?> queryReq = QueryReq.builder();
-            queryReq = (collectionName != null) ? queryReq.collectionName(collectionName.getValue()) : queryReq;
-            queryReq = (partitionName != null)
-                    ? queryReq.partitionNames(Arrays.asList(partitionName.getStringArray())) : queryReq;
-            queryReq = (filter != null) ? queryReq.filter(filter.getValue()) : queryReq;
-            queryReq = (ids != null)
-                    ? queryReq.ids(Arrays.stream(ids.getIntArray()).boxed().collect(Collectors.toList())) : queryReq;
-            if (request.containsKey(OUTPUT_FIELDS)) {
-                BArray outputFields = request.getArrayValue(OUTPUT_FIELDS);
-                List<String> fields = Arrays.asList(outputFields.getStringArray());
-                queryReq.outputFields(fields);
-            }
-            QueryResp queryResponse = client.query(queryReq.build());
-            List<QueryResp.QueryResult> queryResults = queryResponse.getQueryResults();
-            RecordType recordType = TypeCreator.createRecordType(QUERY_RESULT,
-                    ModuleUtils.getModule(), 0, false, 1);
-            ArrayType arrayType = TypeCreator.createArrayType(recordType);
-            BArray[] resultArrays = new BArray[queryResults.size()];
-            for (QueryResp.QueryResult results : queryResults) {
-                BMap<BString, Object>[] responses = new BMap[queryResults.size()];
-                Utils.generateQueryResult(queryResults, responses);
-                BArray responseArray = ValueCreator.createArrayValue(responses,
-                        TypeCreator.createArrayType(recordType));
-                resultArrays[queryResults.indexOf(results)] = responseArray;
-            }
-            return ValueCreator.createArrayValue(resultArrays, TypeCreator.createArrayType(arrayType));
+            QueryRequest params = Utils.parseQueryRequest(request);
+            QueryReq queryReq = Utils.buildQueryRequest(params);
+            QueryResp queryResp = client.query(queryReq);
+            return Utils.transformQueryResults(queryResp);
         } catch (Exception error) {
             return createError("Failed to query data", error);
         }
