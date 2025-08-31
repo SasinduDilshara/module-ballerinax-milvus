@@ -38,8 +38,8 @@ path = "./lib/grpc-netty-shaded-1.60.1.jar"
 [[platform.java21.dependency]]
 groupId = "com.google.guava"
 artifactId = "guava"
-version = "31.1-jre"
-path = "./lib/guava-31.1-jre.jar"
+version = "32.0.1-jre"
+path = "./lib/guava-32.0.1-jre.jar"
 
 [[platform.java21.dependency]]
 groupId = "io.grpc"
@@ -86,5 +86,5 @@ path = "./lib/perfmark-api-0.27.0.jar"
 [[platform.java21.dependency]]
 groupId = "org.apache.commons"
 artifactId = "commons-collections4"
-version = "4.5.0"
-path = "./lib/commons-collections4-4.5.0.jar"
+version = "4.4"
+path = "./lib/commons-collections4-4.4.jar"
