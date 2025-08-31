@@ -90,7 +90,11 @@ public type Entry record {
     # The vectors to upsert into the Milvus collection
     float[] vectors;
     # The properties to upsert into the Milvus collection
-    record{} properties?;
+    Properties properties?;
+};
+
+# Represents the field values to be upserted into the Milvus collection
+public type Properties record {
 };
 
 # Represents the request for the delete operation.
@@ -146,8 +150,9 @@ public type SearchResult record {|
 |};
 
 # Represents the result of the query operation.
-# 
-public type QueryResult record {};
+#
+public type QueryResult record {
+};
 
 # Represents the properties of the search result.
 #
