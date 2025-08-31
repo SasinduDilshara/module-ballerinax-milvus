@@ -20,11 +20,7 @@ package io.ballerina.lib.milvus;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import io.ballerina.runtime.api.creators.TypeCreator;
 import io.ballerina.runtime.api.creators.ValueCreator;
-import io.ballerina.runtime.api.types.ArrayType;
-import io.ballerina.runtime.api.types.RecordType;
-import io.ballerina.runtime.api.types.TypeTags;
 import io.ballerina.runtime.api.utils.StringUtils;
 import io.ballerina.runtime.api.values.BArray;
 import io.ballerina.runtime.api.values.BError;
@@ -38,11 +34,11 @@ import io.milvus.v2.service.collection.request.CreateCollectionReq;
 import io.milvus.v2.service.collection.request.LoadCollectionReq;
 import io.milvus.v2.service.index.request.CreateIndexReq;
 import io.milvus.v2.service.vector.request.DeleteReq;
+import io.milvus.v2.service.vector.request.QueryReq;
 import io.milvus.v2.service.vector.request.SearchReq;
 import io.milvus.v2.service.vector.request.UpsertReq;
-import io.milvus.v2.service.vector.request.data.BaseVector;
-import io.milvus.v2.service.vector.request.data.FloatVec;
 import io.milvus.v2.service.vector.response.DeleteResp;
+import io.milvus.v2.service.vector.response.QueryResp;
 import io.milvus.v2.service.vector.response.SearchResp;
 
 import java.util.ArrayList;
@@ -67,8 +63,6 @@ public class Client {
     public static final BString PRIMARY_KEY = StringUtils.fromString("primaryKey");
     public static final BString DATA = StringUtils.fromString("data");
     public static final BString VECTORS = StringUtils.fromString("vectors");
-    public static final String ID_FIELD = "id";
-    public static final BString ID = StringUtils.fromString(ID_FIELD);
     public static final BString IDS = StringUtils.fromString("ids");
     public static final String VECTOR = "vector";
     public static final BString PARTITION_NAME = StringUtils.fromString("partitionName");
@@ -86,7 +80,12 @@ public class Client {
     public static final BString KEEP_ALIVE_WITHOUT_CALLS = StringUtils.fromString("keepAliveWithoutCalls");
     public static final BString SEARCH_ID = StringUtils.fromString("id");
     public static final BString SIMILARITY_SCORE = StringUtils.fromString("similarityScore");
-    public static final BString ENTITY = StringUtils.fromString("entity");
+    public static final BString PRIMARY_KEY_VALUE = StringUtils.fromString("value");
+    public static final BString PRIMARY_KEY_FIELD_NAME = StringUtils.fromString("fieldName");
+    public static final BString PROPERTIES = StringUtils.fromString("properties");
+    public static final BString OUTPUT_FIELDS = StringUtils.fromString("outputFields");
+    public static final String OUTPUT_FIELDS_TYPE = "OutputFields";
+    public static final String QUERY_RESULT = "QueryResult";
 
     public static BError initiateClient(BObject clientObj, BString serviceUrl, BMap<String, Object> config) {
         try {
@@ -145,6 +144,7 @@ public class Client {
                     .collectionName(collectionName)
                     .dimension(dimension.intValue())
                     .enableDynamicField(true)
+                    .primaryFieldName(request.getStringValue(StringUtils.fromString("primaryFieldName")).getValue())
                     .build();
             client.createCollection(createCollectionRequest);
             return null;
@@ -209,7 +209,9 @@ public class Client {
             String collectionName = request.getStringValue(COLLECTION_NAME).getValue();
             BMap<?, ?> data = request.getMapValue(DATA);
             double[] vectors = ((BArray) data.get(VECTORS)).getFloatArray();
-            long id = data.getIntValue(ID);
+            BMap<?, ?> primaryKey = data.getMapValue(PRIMARY_KEY);
+            long id = primaryKey.getIntValue(PRIMARY_KEY_VALUE);
+            String primaryKeyFieldName = primaryKey.getStringValue(PRIMARY_KEY_FIELD_NAME).getValue();
             Gson gson = new Gson();
             JsonObject row = new JsonObject();
             List<Double> vectorList = new ArrayList<>();
@@ -217,8 +219,11 @@ public class Client {
                 vectorList.add(vector);
             }
             row.add(VECTOR, gson.toJsonTree(vectorList));
-            row.add(ID_FIELD, gson.toJsonTree(id));
-            applyDynamicFields(data, gson, row, ID_FIELD);
+            row.add(primaryKeyFieldName, gson.toJsonTree(id));
+            if (data.containsKey(PROPERTIES)) {
+                BMap<?, ?> properties = data.getMapValue(PROPERTIES);
+                applyDynamicFields(properties, gson, row);
+            }
             List<JsonObject> dataList = new ArrayList<>();
             dataList.add(row);
             UpsertReq upsertRequest = UpsertReq.builder()
@@ -255,67 +260,24 @@ public class Client {
     public static Object search(BObject clientObject, BMap<String, Object> request) {
         try {
             MilvusClientV2 client = (MilvusClientV2) clientObject.getNativeData(NATIVE_CLIENT);
-            BString collectionName = request.getStringValue(COLLECTION_NAME);
-            BArray partitionName = request.getArrayValue(PARTITION_NAMES);
-            BArray vectors = request.getArrayValue(VECTORS);
-            BString filter = request.getStringValue(FILTER);
-            Long topK = request.getIntValue(TOP_K);
-
-            if (vectors == null || vectors.size() == 0) {
-                return createError("Vectors cannot be null or empty", null);
-            }
-            List<BaseVector> vectorArray = new ArrayList<>();
-
-            if (vectors.getElementType().getTag() == TypeTags.FLOAT_TAG) {
-                vectorArray.add(new FloatVec(Arrays.stream(vectors.getFloatArray())
-                        .mapToObj(d -> (float) d)
-                        .collect(Collectors.toList())));
-            } else {
-                for (int i = 0; i < vectors.size(); i++) {
-                    BArray currentVector = (BArray) vectors.get(i); // Use get(i) instead of array access
-                    vectorArray.add(new FloatVec(Arrays.stream(currentVector.getFloatArray())
-                            .mapToObj(d -> (float) d)
-                            .collect(Collectors.toList())));
-                }
-            }
-            SearchReq.SearchReqBuilder<?, ?> searchReq = SearchReq.builder();
-            searchReq = (collectionName != null) ? searchReq.collectionName(collectionName.getValue()) : searchReq;
-            searchReq = (partitionName != null)
-                    ? searchReq.partitionNames(Arrays.asList(partitionName.getStringArray())) : searchReq;
-            searchReq = searchReq.data(vectorArray);
-            searchReq = (filter != null) ? searchReq.filter(filter.getValue()) : searchReq;
-            searchReq = (topK != null) ? searchReq.topK(topK.intValue()) : searchReq;
-
-            SearchResp searchR = client.search(searchReq.build());
-            List<List<SearchResp.SearchResult>> searchResults = searchR.getSearchResults();
-
-            RecordType recordType = TypeCreator.createRecordType(SEARCH_RESULT,
-                    ModuleUtils.getModule(), 0, false, 1);
-            ArrayType arrayType = TypeCreator.createArrayType(recordType);
-            BArray[] resultArrays = new BArray[searchResults.size()];
-
-            for (List<SearchResp.SearchResult> result : searchResults) {
-                BMap<BString, Object>[] responses = new BMap[result.size()];
-                for (SearchResp.SearchResult res : result) {
-                    BMap<BString, Object> response =
-                            ValueCreator.createRecordValue(ModuleUtils.getModule(), SEARCH_RESULT);
-                    BMap<BString, Object> entity = ValueCreator.createMapValue();
-                    for (String key: res.getEntity().keySet()) {
-                        entity.put(StringUtils.fromString(key), res.getEntity().get(key));
-                    }
-                    response.put(PRIMARY_KEY, StringUtils.fromString(res.getPrimaryKey()));
-                    response.put(SEARCH_ID, res.getId());
-                    response.put(SIMILARITY_SCORE, res.getScore().doubleValue());
-                    response.put(ENTITY, entity);
-                    responses[result.indexOf(res)] = response;
-                }
-                BArray responseArray = ValueCreator.createArrayValue(responses,
-                        TypeCreator.createArrayType(recordType));
-                resultArrays[searchResults.indexOf(result)] = responseArray;
-            }
-            return ValueCreator.createArrayValue(resultArrays, TypeCreator.createArrayType(arrayType));
+            SearchRequest params = Utils.parseSearchRequest(request);
+            SearchReq searchReq = Utils.buildSearchRequest(params);
+            SearchResp searchResp = client.search(searchReq);
+            return Utils.transformSearchResults(searchResp);
         } catch (Exception error) {
             return createError("Failed to search data", error);
+        }
+    }
+
+    public static Object query(BObject clientObject, BMap<String, Object> request) {
+        try {
+            MilvusClientV2 client = (MilvusClientV2) clientObject.getNativeData(NATIVE_CLIENT);
+            QueryRequest params = Utils.parseQueryRequest(request);
+            QueryReq queryReq = Utils.buildQueryRequest(params);
+            QueryResp queryResp = client.query(queryReq);
+            return Utils.transformQueryResults(queryResp);
+        } catch (Exception error) {
+            return createError("Failed to query data", error);
         }
     }
 }

@@ -18,41 +18,39 @@ import ballerina/test;
 
 Client milvusClient = check new(serviceUrl = "http://localhost:19530");
 
-string collectionName = "test_collections";
+string collectionName = "test_collection";
 int id  = 10001;
-string primaryKey = "id";
+string primaryKey = "primary_key";
 
 @test:Config {}
 function testCreateCollection() returns error? {
     check milvusClient->createCollection({
         collectionName,
-        dimension: 3
+        dimension: 3,
+        primaryFieldName: "primary_key"
     });
 }
 
-@test:Config {
-    groups: ["list"]
-}
+@test:Config {}
 function testListCollections() returns error? {
     string[] collection = check milvusClient->listCollections();
     test:assertNotEquals(collection.indexOf(collectionName), ());
 }
 
-@test:Config {
-    groups: ["upsert"]
-}
+@test:Config {}
 function testUpsertEntry() returns error? {
     check milvusClient->upsert({
         collectionName,
         data: {
-            id,
+            primaryKey: {
+                value: id,
+                fieldName: "primary_key"
+            },
             vectors: [0.3, 0.4, 0.5],
-            "chunk": {
+            properties: {
                 "content": "test",
                 "type": "text",
-                "metadata": {
-                    "createdTime": "1723600000"
-                }
+                "createdTime": "1723600000"
             }
         }
     });
@@ -70,7 +68,7 @@ function testDeleteEntry() returns error? {
 }
 
 @test:Config {
-    groups: ["delete2"],
+    groups: ["delete"],
     dependsOn: [testSearchNearVectors]
 }
 function testDeleteEntryWithIds() returns error? {
@@ -79,7 +77,10 @@ function testDeleteEntryWithIds() returns error? {
         check milvusClient->upsert({
             collectionName,
             data: {
-                id,
+                primaryKey: {
+                    value: id,
+                    fieldName: "primary_key"
+                },
                 vectors: [0.3, 0.4, 0.5]
             }
         });
@@ -91,7 +92,7 @@ function testDeleteEntryWithIds() returns error? {
 }
 
 @test:Config {
-    groups: ["query"],
+    groups: ["search"],
     dependsOn: [testUpsertEntry, testCreateCollection]
 }
 function testSearchNearVectors() returns error? {
@@ -99,15 +100,33 @@ function testSearchNearVectors() returns error? {
     SearchResult[][] result = check milvusClient->search({
         collectionName,
         vectors: [0.3, 0.4, 0.5],
-        topK: 10
+        topK: 10,
+        outputFields: ["content", "type", "vector"]
     });
     if result.length() > 0 && result[0].length() > 0 {
         result = check milvusClient->search({
             collectionName,
             vectors: [[0.3, 0.4, 0.5]],
             topK: 1,
-            filter: string `${primaryKey} == ${id}`
+            filter: string `${primaryKey} == ${id} and content == "test"`,
+            outputFields: ["content", "type", "vector"]
         });
         test:assertEquals(result[0][0].id, id);
+    }
+}
+
+@test:Config {
+    groups: ["query"],
+    dependsOn: [testUpsertEntry, testCreateCollection]
+}
+function testQueryVectors() returns error? {
+    check milvusClient->loadCollection(collectionName);
+    QueryResult[][] result = check milvusClient->query({
+        collectionName,
+        filter: string `content == "test"`,
+        outputFields: ["content", "type", "vector"]
+    });
+    if result.length() > 0 && result[0].length() > 0 {
+        test:assertEquals(result[0][0]["content"], "test");
     }
 }
