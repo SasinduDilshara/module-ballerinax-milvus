@@ -2,7 +2,14 @@
 
 [Milvus](https://milvus.io/) is an open-source vector database built for scalable similarity search and AI applications. It provides high-performance vector storage and retrieval capabilities, making it ideal for applications involving machine learning, deep learning, and similarity search scenarios.
 
-The Ballerina Milvus connector provides seamless integration with Milvus vector database, enabling developers to perform operations such as creating collections, inserting vector data, building indexes, and conducting similarity searches within Ballerina applications. It supports [Milvus SDK Java v2.6.1](https://github.com/milvus-io/milvus-sdk-java).
+The Milvus connector provides seamless integration with the Milvus vector database, enabling developers to perform operations such as creating collections, inserting vector data, building indexes, and conducting similarity searches.
+
+### Key Features
+
+- Scalable similarity search and AI application support
+- High-performance vector storage and retrieval
+- Efficient collection and index management
+- Support for Milvus SDK Java v2.6.1
 
 ## Setup guide
 
