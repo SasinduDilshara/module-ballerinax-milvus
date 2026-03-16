@@ -1,10 +1,11 @@
 [package]
 org = "ballerinax"
 name = "milvus"
-version = "1.1.0"
+version = "1.1.1"
 authors = ["Ballerina"]
-keywords = ["vector_database", "vector_search", "Vendor/Milvus", "Area/Database", "Type/Connector"]
+keywords = ["Vector Database", "Vector Search", "Vendor/Zilliz", "Area/AI & Machine Learning", "Type/Connector"]
 repository = "https://github.com/ballerina-platform/module-ballerinax-milvus"
+icon = "icon.png"
 license = ["Apache-2.0"]
 distribution = "2201.12.0"
 
@@ -14,8 +15,8 @@ graalvmCompatible = false
 [[platform.java21.dependency]]
 groupId = "io.ballerina.lib"
 artifactId = "milvus-native"
-version = "1.1.0"
-path = "../native/build/libs/milvus-native-1.1.0.jar"
+version = "1.1.1"
+path = "../native/build/libs/milvus-native-1.1.1-SNAPSHOT.jar"
 
 [[platform.java21.dependency]]
 groupId = "io.milvus"
