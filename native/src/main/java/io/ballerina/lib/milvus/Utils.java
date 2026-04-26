@@ -19,15 +19,20 @@
 package io.ballerina.lib.milvus;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import io.ballerina.runtime.api.creators.ErrorCreator;
 import io.ballerina.runtime.api.creators.TypeCreator;
 import io.ballerina.runtime.api.creators.ValueCreator;
 import io.ballerina.runtime.api.types.ArrayType;
+import io.ballerina.runtime.api.types.PredefinedTypes;
 import io.ballerina.runtime.api.types.RecordType;
 import io.ballerina.runtime.api.types.TypeTags;
 import io.ballerina.runtime.api.utils.StringUtils;
 import io.ballerina.runtime.api.values.BArray;
+import io.ballerina.runtime.api.values.BDecimal;
 import io.ballerina.runtime.api.values.BError;
 import io.ballerina.runtime.api.values.BMap;
 import io.ballerina.runtime.api.values.BString;
@@ -38,6 +43,7 @@ import io.milvus.v2.service.vector.request.data.FloatVec;
 import io.milvus.v2.service.vector.response.QueryResp;
 import io.milvus.v2.service.vector.response.SearchResp;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -79,6 +85,11 @@ public class Utils {
     private static Object convertToJsonFields(Object value) {
         if (value instanceof BString stringValue) {
             return stringValue.getValue();
+        }
+        if (value instanceof BDecimal decimalValue) {
+            // Without this, Gson reflects on the Ballerina DecimalValue object and emits
+            // {"valueKind":"OTHER","value":...} instead of a numeric literal.
+            return decimalValue.decimalValue();
         }
         if (value instanceof BArray arr) {
             List<Object> list = new ArrayList<>();
@@ -140,6 +151,13 @@ public class Utils {
         for (Map.Entry<String, Object> entry : entityEntries) {
             String key = entry.getKey();
             Object value = entry.getValue();
+            if (value instanceof JsonElement jsonElement) {
+                // JSON-typed dynamic columns come back as Gson JsonElement. Convert into a
+                // structured Ballerina value (preferring decimal for fractional numbers) so
+                // that callers don't lose type information through a string round-trip.
+                targetMap.put(StringUtils.fromString(key), convertJsonElement(jsonElement));
+                continue;
+            }
             if (!(value instanceof List<?> list)) {
                 targetMap.put(StringUtils.fromString(key),
                         StringUtils.fromString(value.toString()));
@@ -162,6 +180,50 @@ public class Utils {
                 targetMap.put(StringUtils.fromString(key), stringArray);
             }
         }
+    }
+
+    private static Object convertJsonElement(JsonElement element) {
+        if (element == null || element.isJsonNull()) {
+            return null;
+        }
+        if (element instanceof JsonPrimitive primitive) {
+            if (primitive.isBoolean()) {
+                return primitive.getAsBoolean();
+            }
+            if (primitive.isString()) {
+                return StringUtils.fromString(primitive.getAsString());
+            }
+            // primitive.isNumber()
+            BigDecimal bd = primitive.getAsBigDecimal();
+            // Whole numbers (no fractional part, fit in long) come back as Ballerina int;
+            // everything else as decimal so precision is preserved end-to-end.
+            if (bd.scale() <= 0 || bd.stripTrailingZeros().scale() <= 0) {
+                try {
+                    return bd.longValueExact();
+                } catch (ArithmeticException ignored) {
+                    // Falls through to decimal for values that don't fit a long.
+                }
+            }
+            return ValueCreator.createDecimalValue(bd);
+        }
+        if (element instanceof JsonArray array) {
+            BArray result = ValueCreator.createArrayValue(
+                    TypeCreator.createArrayType(PredefinedTypes.TYPE_JSON));
+            for (JsonElement child : array) {
+                result.append(convertJsonElement(child));
+            }
+            return result;
+        }
+        if (element instanceof JsonObject object) {
+            BMap<BString, Object> result = ValueCreator.createMapValue(
+                    TypeCreator.createMapType(PredefinedTypes.TYPE_JSON));
+            for (Map.Entry<String, JsonElement> field : object.entrySet()) {
+                result.put(StringUtils.fromString(field.getKey()), convertJsonElement(field.getValue()));
+            }
+            return result;
+        }
+        // Defensive fallback — should not happen with current Gson types.
+        return StringUtils.fromString(element.toString());
     }
 
     protected static List<BaseVector> getVectors(BArray vectors) {
